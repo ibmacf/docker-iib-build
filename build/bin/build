@@ -1,0 +1,103 @@
+#!/bin/bash
+# -*- mode: sh -*-
+# © Copyright IBM Corporation 2015.
+#
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License v1.0
+# which accompanies this distribution, and is available at
+# http://www.eclipse.org/legal/epl-v10.html
+
+# - 
+_IIBINSTALLLOC=/opt/ibm
+
+if [[ -f ${IIBBUILDDIR}/configuration/lib/commonLib ]] ; then
+	source ${IIBBUILDDIR}/configuration/lib/commonLib
+else
+	echo "ERROR : Can't source [${IIBBUILDDIR}/configure/lib/commonLib]"
+fi
+
+addIIBGroups()
+{
+	log "I >> script $0 [addIIBGroups]"	
+	# -
+	eCmd run "groupadd -g 1667 mqbrkrs"
+	eCmd run "useradd -Nmg mqbrkrs ${IIBADMIN}"
+	log "I << script $0 [addIIBGroups]"	
+}
+
+updateOSandInstallUtilitySoftware()
+{
+	log "I >> script $0 [updateOSandInstallUtilitySoftware]"	
+	# -
+	eCmd run "apt-get -q -y update > /dev/null"
+	eCmd run "apt-get -q -y install ${IIBUTILITYSOFTWARE}  > /dev/null"
+	log "I << script $0 updateOSandInstallUtilitySoftware"	
+
+}
+
+updateAdminUserProfile()
+{
+	log "I >> script $0 [updateAdminUserProfile]"
+	eCmd run "echo ' ' >> /home/${IIBADMIN}/.bash_profile"
+	eCmd run "echo \"source ${_IIBINSTALLLOC}/iib-${IIBVERSION}/server/bin/mqsiprofile\" >> /home/${IIBADMIN}/.bash_profile"
+	log "I << script $0 [updateAdminUserProfile]"
+}
+
+copyConfigurationToUserHome()
+{
+	log "I >> script $0 [copyConfigurationToUserHome]"	
+	# -
+	log "I >> copyConfigurationToUserHome"
+	eCmd run "mkdir -p ${_IIBINSTALLLOC}"
+	eCmd run "mv ${IIBBUILDDIR}/configuration ${IIBCONFIGURELOC}"
+	updateAdminUserProfile
+	eCmd run "chown -R ${IIBADMIN}:mqbrkrs ${IIBCONFIGURELOC}"
+	log "I << script $0 [copyConfigurationToUserHome]"	
+
+}
+
+downloadInstallIIBAcceptLicence()
+{
+	log "I >> script $0 [downloadInstallIIBAcceptLicence]"
+	eCmd run "cd ${IIBBUILDDIR}/software"
+	eCmd run "curl -LO ${IIBMEDIAURL}" 
+	eCmd run "tar --exclude="tools" -xf ./${IIBIMAGENAME} --directory ${_IIBINSTALLLOC}/"
+	#-
+	eCmd run "${_IIBINSTALLLOC}/iib-${IIBVERSION}/iib make registry global accept license silently"
+	log "I << script $0 downloadInstallIIBAcceptLicence"
+}
+
+configureCINITD()
+{
+	log "I >>  script $0 [configureCINITD]"
+	eCmd run "mkdir -p /etc/cinit.d"
+	eCmd run "cp ${IIBBUILDDIR}/software/cinitd /sbin/"
+	eCmd run "ln -s ${IIBCONFIGURELOC}/configuration/configure_iib /etc/cinit.d/configure_iib"
+	log "I <<  script $0 [configureCINITD]"
+}
+
+cleanUPImageAfterBuild()
+{
+	log "I >>  script $0 [cleanUPImageAfterBuild]"
+	eCmd run "rm -rf ${IIBBUILDDIR}"
+	log "I <<  script $0 [cleanUPImageAfterBuild]"
+}
+
+#:: Main
+log "I >> $0 [Begin]"
+echo "${IIBVERSION}" > /etc/debian_chroot
+export DEBIAN_FRONTEND=noninteractive
+
+addIIBGroups
+
+updateOSandInstallUtilitySoftware
+
+copyConfigurationToUserHome
+
+downloadInstallIIBAcceptLicence
+
+configureCINITD
+
+cleanUPImageAfterBuild
+
+log "I << $0 [End]"
